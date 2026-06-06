@@ -2,25 +2,12 @@ import os
 import json
 import traceback
 
-# ── TENSORFLOW MEMORY & CPU LIMITS (MUST BE BEFORE TF LOADS) ──
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Force CPU only
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'   # Suppress unnecessary warnings
-
 import numpy as np
 import streamlit as st
 from PIL import Image
 import plotly.graph_objects as go
-
 import tensorflow as tf
 from tensorflow.keras.applications.efficientnet import preprocess_input
-
-# Throttle TensorFlow threads to prevent Out-Of-Memory (OOM) crashes on deployment
-try:
-    tf.config.threading.set_intra_op_parallelism_threads(1)
-    tf.config.threading.set_inter_op_parallelism_threads(1)
-except Exception:
-    pass
-
 
 # ── PAGE CONFIG ───────────────────────────────────────────────
 st.set_page_config(
@@ -154,6 +141,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── FILE UPLOADER ─────────────────────────────────────────────
+# Streamlit automatically keeps the file in the widget across reruns.
+# No session state needed for the file itself.
 uploaded = st.file_uploader(
     "Drop your food photo here",
     type=["jpg", "jpeg", "png"],
