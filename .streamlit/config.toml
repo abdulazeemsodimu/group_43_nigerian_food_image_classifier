@@ -1,12 +1,10 @@
 [server]
-maxUploadSize = 200
-enableXsrfProtection = false
-
-[browser]
-gatherUsageStats = false
-
-[server]
 maxUploadSize = 50
 headless = true
 port = 8501
 enableCORS = false
+
+[browser]
+gatherUsageStats = false
+
+
