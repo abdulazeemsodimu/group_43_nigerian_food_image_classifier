@@ -1,10 +1,9 @@
 [server]
-maxUploadSize = 50
-headless = true
-port = 8501
+maxUploadSize = 200
+enableXsrfProtection = false
 enableCORS = false
+headless = true
 
 [browser]
 gatherUsageStats = false
-
-
+serverAddress = "localhost"
