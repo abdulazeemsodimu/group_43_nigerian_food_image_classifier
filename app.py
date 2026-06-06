@@ -1,7 +1,6 @@
 import os
 import json
 import traceback
-from io import BytesIO
 
 import numpy as np
 import streamlit as st
@@ -39,22 +38,18 @@ def get_emoji(name: str) -> str:
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap');
-
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-
 .stApp {
     background: #0a0f1e;
     background-image:
         radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0,135,81,0.25) 0%, transparent 60%),
         radial-gradient(ellipse 60% 40% at 80% 110%, rgba(14,165,233,0.18) 0%, transparent 60%);
 }
-
 [data-testid="stSidebar"] {
     background: rgba(255,255,255,0.03) !important;
     border-right: 1px solid rgba(255,255,255,0.07);
 }
 [data-testid="stSidebar"] * { color: #e2e8f0 !important; }
-
 .hero {
     padding: 2.5rem 2rem; border-radius: 20px;
     background: linear-gradient(135deg, #008751 0%, #006e42 40%, #0ea5e9 100%);
@@ -62,10 +57,9 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 }
 .hero h1 {
     font-family: 'Syne', sans-serif; font-size: 2.2rem;
-    font-weight: 800; margin: 0 0 0.4rem; letter-spacing: -0.5px;
+    font-weight: 800; margin: 0 0 0.4rem;
 }
 .hero p { font-size: 1rem; opacity: 0.88; margin: 0; }
-
 .result-card {
     background: rgba(255,255,255,0.05); backdrop-filter: blur(20px);
     padding: 1.8rem; border-radius: 18px;
@@ -73,7 +67,7 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 }
 .food-name {
     font-family: 'Syne', sans-serif; font-size: 1.9rem;
-    font-weight: 800; color: #f1f5f9; margin: 0.3rem 0 1rem; line-height: 1.2;
+    font-weight: 800; color: #f1f5f9; margin: 0.3rem 0 1rem;
 }
 .conf-label {
     font-size: 0.78rem; letter-spacing: 0.1em;
@@ -83,15 +77,12 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     font-family: 'Syne', sans-serif; font-size: 2.4rem;
     font-weight: 700; color: #4ade80; line-height: 1;
 }
-
 [data-testid="stFileUploader"] {
     background: rgba(255,255,255,0.03);
     border: 2px dashed rgba(255,255,255,0.15);
     border-radius: 16px; padding: 1rem;
 }
 [data-testid="stFileUploader"] * { color: #cbd5e1 !important; }
-[data-testid="stMetricValue"] { color: #4ade80 !important; font-family: 'Syne', sans-serif; }
-.stMarkdown, p, span, label { color: #cbd5e1; }
 #MainMenu { visibility: hidden; }
 footer    { visibility: hidden; }
 header    { visibility: hidden; }
@@ -116,13 +107,8 @@ def load_classes():
 def preprocess(img: Image.Image) -> np.ndarray:
     img = img.convert("RGB").resize(IMG_SIZE, Image.LANCZOS)
     arr = np.array(img, dtype=np.float32)
-    arr = preprocess_input(arr)          # scale to [-1, 1]
-    return np.expand_dims(arr, axis=0)  # (1, 224, 224, 3)
-
-# ── SESSION STATE INIT ────────────────────────────────────────
-if "image"  not in st.session_state: st.session_state.image  = None
-if "pred"   not in st.session_state: st.session_state.pred   = None
-if "error"  not in st.session_state: st.session_state.error  = None
+    arr = preprocess_input(arr)
+    return np.expand_dims(arr, axis=0)
 
 # ── LOAD CLASSES ──────────────────────────────────────────────
 try:
@@ -146,11 +132,6 @@ with st.sidebar:
     st.divider()
     st.info(f"Model knows **{len(classes)}** Nigerian food classes.")
 
-    if st.button("🔄 Upload New Image", use_container_width=True):
-        st.session_state.image = None
-        st.session_state.pred  = None
-        st.session_state.error = None
-
 # ── HERO ──────────────────────────────────────────────────────
 st.markdown("""
 <div class="hero">
@@ -160,64 +141,42 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── FILE UPLOADER ─────────────────────────────────────────────
-# Always render the uploader so Streamlit tracks widget state.
-# Hide it visually once an image is already loaded.
+# Streamlit automatically keeps the file in the widget across reruns.
+# No session state needed for the file itself.
 uploaded = st.file_uploader(
     "Drop your food photo here",
     type=["jpg", "jpeg", "png"],
-    label_visibility="visible" if st.session_state.image is None else "collapsed",
 )
 
-# New file uploaded → read bytes immediately into session state
-if uploaded is not None:
-    try:
-        raw  = uploaded.read()
-        img  = Image.open(BytesIO(raw)).copy()
-        st.session_state.image = img
-        st.session_state.pred  = None
-        st.session_state.error = None
-    except Exception as exc:
-        st.error(f"❌ Could not open image: {exc}")
-        st.stop()
-
-# ── PREDICTION ────────────────────────────────────────────────
-if st.session_state.image is not None and \
-   st.session_state.pred  is None and \
-   st.session_state.error is None:
-
-    with st.spinner("Analysing your food image…"):
-        try:
-            model  = load_model()
-            tensor = preprocess(st.session_state.image)
-            output = model.predict(tensor, verbose=0)
-            # Store as plain Python list — avoids numpy serialisation issues
-            st.session_state.pred = output[0].tolist()
-        except Exception:
-            st.session_state.error = traceback.format_exc()
-
-# ── ERROR DISPLAY ─────────────────────────────────────────────
-if st.session_state.error:
-    st.error("❌ Prediction failed. See traceback below:")
-    st.code(st.session_state.error, language="python")
-    if st.button("Try another image"):
-        st.session_state.image = None
-        st.session_state.error = None
+# ── MAIN LOGIC ────────────────────────────────────────────────
+if uploaded is None:
+    st.info("👆 Upload a Nigerian food image to get started.")
     st.stop()
 
-# ── RESULTS ───────────────────────────────────────────────────
-if st.session_state.image is not None and st.session_state.pred is not None:
-    image = st.session_state.image
-    pred  = np.array(st.session_state.pred)
-    idx   = int(np.argmax(pred))
-    conf  = float(pred[idx])
-    food  = classes[idx]
+# ── OPEN IMAGE ────────────────────────────────────────────────
+try:
+    image = Image.open(uploaded).convert("RGB")
+except Exception as exc:
+    st.error(f"❌ Could not open image: {exc}")
+    st.stop()
 
-    col_img, col_info = st.columns([1, 1], gap="large")
+# ── SHOW IMAGE IMMEDIATELY ────────────────────────────────────
+col_img, col_info = st.columns([1, 1], gap="large")
+with col_img:
+    st.image(image, use_container_width=True, caption=uploaded.name)
 
-    with col_img:
-        st.image(image, use_container_width=True, caption="Uploaded image")
+# ── RUN PREDICTION ────────────────────────────────────────────
+with col_info:
+    try:
+        with st.spinner("Analysing image…"):
+            model  = load_model()
+            tensor = preprocess(image)
+            pred   = model.predict(tensor, verbose=0)[0]
 
-    with col_info:
+        idx  = int(np.argmax(pred))
+        conf = float(pred[idx])
+        food = classes[idx]
+
         st.markdown('<div class="result-card">', unsafe_allow_html=True)
         st.markdown(f"### {get_emoji(food)}")
         st.markdown(f'<p class="food-name">{food.title()}</p>', unsafe_allow_html=True)
@@ -227,46 +186,45 @@ if st.session_state.image is not None and st.session_state.pred is not None:
         st.progress(float(conf))
         st.divider()
         if conf >= 0.80:
-            st.success("High confidence prediction ✅")
+            st.success("High confidence ✅")
         elif conf >= 0.50:
-            st.warning("Moderate confidence — result may vary ⚠️")
+            st.warning("Moderate confidence ⚠️")
         else:
             st.error("Low confidence — try a clearer photo 📷")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── TOP-K CHART ───────────────────────────────────────────
-    st.markdown("### 📊 Top Predictions")
-    top_idx = np.argsort(pred)[::-1][:TOP_K]
-    labels  = [f"{get_emoji(classes[i])} {classes[i].title()}" for i in top_idx]
-    values  = [round(float(pred[i]) * 100, 2) for i in top_idx]
-    colors  = ["#008751" if i == 0 else "#0ea5e9" for i in range(len(top_idx))]
+    except Exception:
+        st.error("❌ Prediction failed. Full error:")
+        st.code(traceback.format_exc(), language="python")
+        st.stop()
 
-    fig = go.Figure(go.Bar(
-        x=values, y=labels, orientation="h",
-        marker=dict(color=colors, line=dict(color="rgba(255,255,255,0.1)", width=1)),
-        text=[f"{v:.1f}%" for v in values],
-        textposition="outside",
-        textfont=dict(color="#e2e8f0", size=13),
-    ))
-    fig.update_layout(
-        height=320,
-        margin=dict(l=10, r=60, t=20, b=20),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        xaxis=dict(
-            showgrid=True, gridcolor="rgba(255,255,255,0.07)",
-            tickfont=dict(color="#64748b"),
-            range=[0, max(values) * 1.18],
-            title=dict(text="Confidence (%)", font=dict(color="#64748b")),
-        ),
-        yaxis=dict(tickfont=dict(color="#e2e8f0", size=13), autorange="reversed"),
-        font=dict(family="DM Sans, sans-serif"),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+# ── TOP-K CHART ───────────────────────────────────────────────
+st.markdown("### 📊 Top Predictions")
 
-elif st.session_state.image is None:
-    st.markdown(
-        "<p style='text-align:center;color:#64748b;margin-top:1rem;'>"
-        "Supported formats: JPG · JPEG · PNG</p>",
-        unsafe_allow_html=True,
-    )
+top_idx = np.argsort(pred)[::-1][:TOP_K]
+labels  = [f"{get_emoji(classes[i])} {classes[i].title()}" for i in top_idx]
+values  = [round(float(pred[i]) * 100, 2) for i in top_idx]
+colors  = ["#008751" if i == 0 else "#0ea5e9" for i in range(len(top_idx))]
+
+fig = go.Figure(go.Bar(
+    x=values, y=labels, orientation="h",
+    marker=dict(color=colors, line=dict(color="rgba(255,255,255,0.1)", width=1)),
+    text=[f"{v:.1f}%" for v in values],
+    textposition="outside",
+    textfont=dict(color="#e2e8f0", size=13),
+))
+fig.update_layout(
+    height=320,
+    margin=dict(l=10, r=60, t=20, b=20),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(255,255,255,0.03)",
+    xaxis=dict(
+        showgrid=True, gridcolor="rgba(255,255,255,0.07)",
+        tickfont=dict(color="#64748b"),
+        range=[0, max(values) * 1.18],
+        title=dict(text="Confidence (%)", font=dict(color="#64748b")),
+    ),
+    yaxis=dict(tickfont=dict(color="#e2e8f0", size=13), autorange="reversed"),
+    font=dict(family="DM Sans, sans-serif"),
+)
+st.plotly_chart(fig, use_container_width=True)
