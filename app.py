@@ -73,23 +73,22 @@ def load_classes():
 
 classes = load_classes()
 
+# ---------------- SESSION STATE ----------------
+if "image" not in st.session_state:
+    st.session_state.image = None
+if "pred" not in st.session_state:
+    st.session_state.pred = None
+
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.title("🇳🇬 Naija Food AI")
-
     st.success("EfficientNetB0 Model")
-
     st.write("Nigerian Food Image Classifier")
-
     st.markdown("---")
-
     st.subheader("🍽️ Available Classes")
-
     for food in sorted(classes):
         st.write(f"• {food.title()}")
-
     st.markdown("---")
-
     st.info(f"Model can recognize {len(classes)} Nigerian food classes.")
 
 # ---------------- MAIN HEADER ----------------
@@ -104,65 +103,63 @@ st.markdown("""
 def preprocess(img):
     img = img.convert("RGB").resize(IMG_SIZE)
     arr = np.array(img, dtype=np.float32)
-    arr = preprocess_input(arr)  # 🔥 correct EfficientNet preprocessing
+    arr = preprocess_input(arr)
     return np.expand_dims(arr, axis=0)
 
 # ---------------- UPLOAD ----------------
 uploaded = st.file_uploader(
     "Upload Food Image",
-    type=["jpg", "jpeg", "png", "webp"]
+    type=["jpg", "jpeg", "png"]   # removed webp — causes issues on some versions
 )
 
-if uploaded:
+# Save to session state as soon as a file arrives
+if uploaded is not None:
+    st.session_state.image = Image.open(uploaded)
+    st.session_state.pred = None  # reset prediction for new image
 
-    try:
-        image = Image.open(uploaded)
+# ---------------- PREDICT ----------------
+if st.session_state.image is not None:
+    image = st.session_state.image
 
-        with st.spinner("Analyzing image..."):
-            model = load_model()
-            processed = preprocess(image)
-            pred = model.predict(processed, verbose=0)[0]
+    # Only run model if we don't already have a prediction for this image
+    if st.session_state.pred is None:
+        try:
+            with st.spinner("Analyzing image..."):
+                model = load_model()
+                processed = preprocess(image)
+                st.session_state.pred = model.predict(processed, verbose=0)[0]
+        except Exception as e:
+            st.error("Prediction failed. Please try another image.")
+            st.exception(e)
+            st.stop()
 
-        # ---------------- PREDICTION ----------------
-        idx = int(np.argmax(pred))
-        conf = float(pred[idx])
-        food = classes[idx]
+    pred = st.session_state.pred
 
-        c1, c2 = st.columns(2)
+    # ---------------- RESULTS ----------------
+    idx = int(np.argmax(pred))
+    conf = float(pred[idx])
+    food = classes[idx]
 
-        with c1:
-            st.image(image, use_container_width=True)
+    c1, c2 = st.columns(2)
 
-        with c2:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.markdown(f"# {emoji(food)} {food.title()}")
-            st.metric("Confidence", f"{conf*100:.1f}%")
-            st.progress(conf)
-            st.markdown("</div>", unsafe_allow_html=True)
+    with c1:
+        st.image(image, use_container_width=True)
 
-        # ---------------- TOP-K ----------------
-        top_idx = np.argsort(pred)[::-1][:TOP_K]
-        labels = [classes[i] for i in top_idx]
-        values = [float(pred[i]) * 100 for i in top_idx]
+    with c2:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown(f"# {emoji(food)} {food.title()}")
+        st.metric("Confidence", f"{conf*100:.1f}%")
+        st.progress(conf)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        fig = go.Figure(
-            go.Bar(
-                x=values,
-                y=labels,
-                orientation="h"
-            )
-        )
+    # ---------------- TOP-K CHART ----------------
+    top_idx = np.argsort(pred)[::-1][:TOP_K]
+    labels = [classes[i] for i in top_idx]
+    values = [float(pred[i]) * 100 for i in top_idx]
 
-        fig.update_layout(
-            title="Top Predictions",
-            height=400
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    except Exception as e:
-        st.error("Prediction failed. Please try another image.")
-        st.exception(e)
+    fig = go.Figure(go.Bar(x=values, y=labels, orientation="h"))
+    fig.update_layout(title="Top Predictions", height=400)
+    st.plotly_chart(fig, use_container_width=True)
 
 else:
     st.info("Upload a Nigerian food image to begin.")
